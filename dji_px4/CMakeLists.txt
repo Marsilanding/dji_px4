@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 2.8.3)
 project(dji_px4)
 
 ## Find catkin and any catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs mavros_msgs uav_abstraction_layer)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs mavros_msgs)
+
 ## Declare a catkin package
 catkin_package()
 
