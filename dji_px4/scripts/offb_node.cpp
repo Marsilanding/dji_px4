@@ -32,13 +32,17 @@
 #include <uav_abstraction_layer/AttRateSetpoint.h>
 #include <uav_abstraction_layer/SetHome.h>
 #include <uav_abstraction_layer/TakeOff.h>
-
 #include <uav_abstraction_layer/Land.h>
+
+#include <dji_px4/DroneTaskControl.h>
+
 
 
 int ctrl_flag = 4;
 double takeoff_height = 2.0;
 bool blocking = 1;
+
+int dji_task = 0; /*tarea solicitada por el servicio drone_task_control de DJI*/
 
 mavros_msgs::State mavros_state_;
 void state_cb(const mavros_msgs::State::ConstPtr& msg){
@@ -65,7 +69,7 @@ std_msgs::Float64 joy_y_rec;
 std_msgs::Float64 joy_z_rec;
 std_msgs::Float64 joy_yaw_rec;
 std_msgs::Float64 flag_msg; /*flag de /dji_sdk/flight_control_setpoint_generic*/
-int flag = 0; /*flag en entero*/
+int flag = flag_msg.data; /*flag en entero*/
 
 
 
@@ -109,6 +113,16 @@ void dji_rollpitch_yawrate_z(const sensor_msgs::Joy::ConstPtr& msg){
     ctrl_flag = 3;  
 }
 
+/*Callback de las llamadas a servicios de DJI*/
+
+bool task_request(
+       dji_px4::DroneTaskControl::Request &req,
+       dji_px4::DroneTaskControl::Response &resp){
+       dji_task = req.task;
+       ROS_INFO("Comando DroneTaskControl --%d recibido, enviando a UAL", dji_task);
+       return true;
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "offb_node");
@@ -132,6 +146,13 @@ int main(int argc, char **argv)
     ros::ServiceClient sethome_client = nh.serviceClient<uav_abstraction_layer::SetHome>
             ("/ual/set_home");
 
+    /*Servicios de DJI*/
+
+    ros::ServiceServer server = nh.advertiseService("/dji_sdk/drone_task_control",&task_request);
+    ros::ServiceClient dji_takeoff_client = nh.serviceClient<dji_px4::DroneTaskControl>
+            ("/dji_sdk/drone_task_control");
+
+    /*Suscriptores de MAVROS*/
 
     ros::Subscriber mavros_state = nh.subscribe<mavros_msgs::State>
             ("mavros/state", 10, state_cb);
@@ -182,15 +203,18 @@ int main(int argc, char **argv)
     ros::Rate rate(20.0);
 
     
-    /*Given wp*/
     geometry_msgs::PoseStamped pose;
     geometry_msgs::TwistStamped twist;
     uav_abstraction_layer::AttSetpoint attitude;
     uav_abstraction_layer::AttRateSetpoint attitude_rate;
     uav_abstraction_layer::TakeOff::Request takeoff_req;
     uav_abstraction_layer::TakeOff::Response takeoff_resp;
-    takeoff_req.height = takeoff_height;
-    takeoff_req.blocking = blocking;
+    uav_abstraction_layer::Land::Request land_req;
+    uav_abstraction_layer::Land::Response land_resp;
+    uav_abstraction_layer::SetHome::Request gohome_req;
+    uav_abstraction_layer::SetHome::Response gohome_resp;
+    dji_px4::DroneTaskControl::Request dji_takeoff_req;
+    dji_px4::DroneTaskControl::Response dji_takeoff_resp;
 
 
     int r = 0;
@@ -297,14 +321,29 @@ int main(int argc, char **argv)
             local_attitude_pub.publish(attitude);
             /*local_attitude_rate_pub.publish(attitude_rate);*/
             }
+
+        /*Aquí va el remapeo de servicios*/
         else if (ctrl_flag == 4){
-            if(takeoff_client.call(takeoff_req, takeoff_resp)){
-                ROS_INFO("Takeoff Success");
-                ctrl_flag = 5;
+            if(dji_task == 4){
+                takeoff_req.height = takeoff_height;
+                takeoff_req.blocking = blocking;
+                if(takeoff_client.call(takeoff_req, takeoff_resp)) ROS_INFO("Takeoff Success");
+                dji_task = 0;
+            }
+
+            else if(dji_task == 6){
+                land_req.blocking = blocking; 
+                if(land_client.call(land_req, land_resp)) ROS_INFO("Land Success");
+                dji_task = 0;
+            }
+            else if(dji_task == 1){
+                gohome_req.set_z = 1; 
+                if(sethome_client.call(gohome_req, gohome_resp)) ROS_INFO("Set Home Success");
+                dji_task = 0;
             }
         }
         ros::spinOnce();
-        rate.sleep();
+        rate.sleep();  
     }
 
     return 0;
