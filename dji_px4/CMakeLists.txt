@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs mavros_msgs uav_ab
 add_service_files(
   FILES
   DroneTaskControl.srv
+  SDKControlAuthority.srv
 )
 
 ## Generate added messages and services with any dependencies listed here
@@ -22,5 +23,8 @@ catkin_package()
 ## Build talker and listener
 include_directories(include ${catkin_INCLUDE_DIRS})
 
-add_executable(offb_node scripts/offb_node.cpp)
-target_link_libraries(offb_node ${catkin_LIBRARIES})
+add_executable(dji_px4_interface scripts/dji_px4_interface.cpp)
+target_link_libraries(dji_px4_interface ${catkin_LIBRARIES})
+
+add_executable(dji_client scripts/dji_client.cpp)
+target_link_libraries(dji_client ${catkin_LIBRARIES})
